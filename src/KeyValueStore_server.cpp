@@ -26,7 +26,7 @@ struct KVServerStatus
   enum type
   {
     NOTJOINED,
-    STARTING,
+    SYNCING,
     RUNNING,
     DIED
   };
@@ -68,7 +68,7 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     cout << "Starting server " << argv[1] << "...";
     KVStoreStatus::type status;
     status = _Put("syscmd_server_status", "starting");
-    _status = KVServerStatus::STARTING;
+    _status = KVServerStatus::SYNCING;
     //step1: find a running server;
     int target = findRunningServer();
 
@@ -84,7 +84,6 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       //if (status != KVStoreStatus::OK)
       //  return status;
     }
-
 
     status = _Put("syscmd_server_status", "running");
     _status = KVServerStatus::RUNNING;
@@ -145,6 +144,20 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       status = _Put(lrp.values[i], lrp.values[i]);
       if (status != KVStoreStatus::OK)
         return status;
+
+      // get user's subscription data 
+      GetListResponse sub_lrp;
+      sub_lrp = RPC_GetList(server, lrp.values[i] + "_sub");
+      if (sub_lrp.status != KVStoreStatus::OK)
+        return sub_lrp.status;
+
+      int sub_size = sub_lrp.values.size();
+      for (int j = 0; j < sub_size; j++)
+      {
+        status = _AddToList(lrp.values[i] + "_sub", sub_lrp.values[j]);
+        if (status != KVStoreStatus::OK)
+          return status;
+      }
     }
 
     return KVStoreStatus::OK;
@@ -471,8 +484,9 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
   private:
     string _id;
     KVServerStatus::type _status;
-    set<int> _runningServer;
     vector < pair<string, int> > _backendServerVector;
+    map<string, int> _backendServerIDMap;
+    set<int> _runningServer;
 
     map<string, string> _simpleStorage;
     map<string, set<string> > _listStorage;
