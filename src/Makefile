@@ -23,6 +23,9 @@ all: tribbler_server tribbler_client kv_server
 kv_server: KeyValueStore_server.o $(KV_OBJ)
 	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift
 
+kv_client: KeyValueStore_client.o $(KV_OBJ)
+	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift
+
 tribbler_server: Tribbler_server.o $(TRIBBLER_OBJ) $(KV_OBJ)
 	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift
 

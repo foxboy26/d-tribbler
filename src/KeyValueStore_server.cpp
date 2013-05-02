@@ -57,35 +57,42 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
   KeyValueStoreHandler(int argc, char** argv) {
     // Your initialization goes here
     _id = string(argv[1]);
+    setServerInfo("server_id", _id);
+    setServerInfo("server_status", "notjoined");
 
     for(int i = 3; i+1 < argc; i += 2) {
       string peer_ip(argv[i]);
       int peer_port = atoi(argv[i+1]);
       _backendServerVector.push_back(make_pair(peer_ip, peer_port));
+      _notJoinedServer.insert(_backendServerVector.size() - 1);
       cout << "Backend server at: " << peer_ip << " on port: " << peer_port << endl;
     }
 
-    cout << "Starting server " << argv[1] << "...";
-    KVStoreStatus::type status;
-    status = _Put("syscmd_server_status", "starting");
+    cout << "Starting server [" << _id << "] ...";
+    setServerInfo("server_status", "syncing");
     _status = KVServerStatus::SYNCING;
+
     //step1: find a running server;
     int target = findRunningServer();
 
     //step2: get data from running server if necessary
     if (target != -1)
     {
+      cout << endl << "Syncing data from server [" << target << "] ..." << endl;
+
+      KVStoreStatus::type status;
       status = GetDataFromServer(target);
-      //if (status != KVStoreStatus::OK)
-      //  return status;
+      if (status != KVStoreStatus::OK)
+        return;
 
       //step3: tell other server I am ready.
+      cout << "Server [" << _id << "] is ready to join, inform running servers..." << endl;
       status = joinCluster();
-      //if (status != KVStoreStatus::OK)
-      //  return status;
+      if (status != KVStoreStatus::OK)
+        return;
     }
 
-    status = _Put("syscmd_server_status", "running");
+    setServerInfo("server_status", "running");
     _status = KVServerStatus::RUNNING;
 
     cout << "success!" << endl;
@@ -99,11 +106,12 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     int size = _backendServerVector.size();
     for (int i = 0; i < size; i++)
     {
-      rp = RPC_Get(i, "syscmd_server_status");
+      rp = RPC_Get(i, "server_status");
       if (rp.status == KVStoreStatus::OK)
       {
         if (rp.value == "running")
         {
+          _notJoinedServer.erase(i);
           _runningServer.insert(i);
           if (target == -1)
             target = i;
@@ -119,7 +127,7 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     KVStoreStatus::type status;
     for(set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
     {
-      status = RPC_Put(*it, "syscmd", "join cluster");
+      status = RPC_Put(*it, "server_syscmd", "join cluster");
       if (status != KVStoreStatus::OK)
         return status;
     }
@@ -130,6 +138,9 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
   {
     GetListResponse lrp;
     lrp = RPC_GetList(server, "user_list");
+    if (lrp.status == KVStoreStatus::EKEYNOTFOUND)
+      return KVStoreStatus::OK;
+
     if (lrp.status != KVStoreStatus::OK)
       return lrp.status;
 
@@ -145,19 +156,23 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       if (status != KVStoreStatus::OK)
         return status;
 
-      // get user's subscription data 
+      // get user's subscription data if exists
       GetListResponse sub_lrp;
       sub_lrp = RPC_GetList(server, lrp.values[i] + "_sub");
-      if (sub_lrp.status != KVStoreStatus::OK)
-        return sub_lrp.status;
-
-      int sub_size = sub_lrp.values.size();
-      for (int j = 0; j < sub_size; j++)
+      if (sub_lrp.status == KVStoreStatus::OK)
       {
-        status = _AddToList(lrp.values[i] + "_sub", sub_lrp.values[j]);
-        if (status != KVStoreStatus::OK)
-          return status;
+        int sub_size = sub_lrp.values.size();
+        for (int j = 0; j < sub_size; j++)
+        {
+          status = _AddToList(lrp.values[i] + "_sub", sub_lrp.values[j]);
+          if (status != KVStoreStatus::OK)
+            return status;
+        }
       }
+      else if (sub_lrp.status == KVStoreStatus::EKEYNOTFOUND)
+        continue;
+      else
+        return sub_lrp.status;
     }
 
     return KVStoreStatus::OK;
@@ -167,10 +182,9 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     // Your implementation goes here
     if (acceptRequest())
     {
-      printf("Get\n");
+      cout << "Server [" << _id << "]: Get" << endl;
 
       _Get(_return, key);
-      //TODO: check timestamp
     }
     else
     {
@@ -184,7 +198,7 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     // Your implementation goes here
     if (acceptRequest())
     {
-      printf("GetList\n");
+      cout << "Server [" << _id << "]: GetList" << endl;
 
       _GetList(_return, key);
     }
@@ -200,32 +214,40 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     // Your implementation goes here
     if (acceptRequest())
     {
-      printf("Put\n");
+      cout << "Server [" << _id << "]: Put request from [" << clientid << "]" << endl;
 
-      //TODO: forward request from tribble server
       if (clientid == "tribbleserver")
       {
         KVStoreStatus::type status;
-        for (set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
-        {
-          status = RPC_Put(*it, key, value);
-          if (status == KVStoreStatus::INTERNAL_FAILURE)
-            continue;
-          else if (status != KVStoreStatus::OK)
-            return status;
-        }
-        return _Put(key, value);
-      }
-      else //TODO: process request from other KV server
-      {
-        if (key.find("syscmd_"))
-        {
-          //process system commad
 
+        status = _Put(key, value);
+        if (status == KVStoreStatus::OK)
+        {
+          for (set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
+          {
+            status = RPC_Put(*it, key, value);
+            if (status == KVStoreStatus::INTERNAL_FAILURE)
+              continue;
+            else if (status != KVStoreStatus::OK)
+              return status;
+          }
+        }
+
+        return KVStoreStatus::OK;
+      }
+      else 
+      {
+        if (key == "server_syscmd")
+        {
+          cout << "Server [" << _id << "]: Process command [" << value << "] from [" << clientid << "]" << endl;
+          processCommand(value, clientid);
           return KVStoreStatus::OK;
         }
         else
-         return _Put(key, value);
+        {
+          //TODO: process request from other KV server
+          return _Put(key, value);
+        }
       }
     }
     else
@@ -240,21 +262,27 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     // Your implementation goes here
     if (acceptRequest())
     {
-      printf("AddToList\n");
+      cout << "Server [" << _id << "]: AddToList request from [" << clientid << "]" << endl;
 
       //TODO: forward request from tribble server
       if (clientid == "tribbleserver")
       {
         KVStoreStatus::type status;
-        for (set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
+
+        status = _AddToList(key, value);
+        if (status == KVStoreStatus::OK)
         {
-          status = RPC_RemoveFromList(*it, key, value);
-          if (status == KVStoreStatus::INTERNAL_FAILURE)
-            continue;
-          else if (status != KVStoreStatus::OK)
-            return status;
+          for (set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
+          {
+            status = RPC_AddToList(*it, key, value);
+            if (status == KVStoreStatus::INTERNAL_FAILURE)
+              continue;
+            else if (status != KVStoreStatus::OK)
+              return status;
+          }
         }
-        return _AddToList(key, value);
+
+        return KVStoreStatus::OK;
       }
       else
       {
@@ -271,20 +299,26 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     // Your implementation goes here
     if (acceptRequest())
     {
-      printf("RemoveFromList\n");
+      cout << "Server [" << _id << "]: RemoveFromList request from [" << clientid << "]" << endl;
       //TODO: forward request from tribble server
       if (clientid == "tribbleserver")
       {
         KVStoreStatus::type status;
-        for (set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
+
+        status = _RemoveFromList(key, value);
+        if (status == KVStoreStatus::OK)
         {
-          status = RPC_RemoveFromList(*it, key, value);
-          if (status == KVStoreStatus::INTERNAL_FAILURE)
-            continue;
-          else if (status != KVStoreStatus::OK)
-            return status;
+          for (set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
+          {
+            status = RPC_RemoveFromList(*it, key, value);
+            if (status == KVStoreStatus::INTERNAL_FAILURE)
+              continue;
+            else if (status != KVStoreStatus::OK)
+              return status;
+          }
         }
-        return _RemoveFromList(key, value);
+
+        return KVStoreStatus::OK;
       }
       else
       {
@@ -424,15 +458,15 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     it = _listStorage.find(key);
     if (it == _listStorage.end())
       _return.status = KVStoreStatus::EKEYNOTFOUND;
-
-    for (std::set<std::string>::iterator s_it = it->second.begin(); s_it != it->second.end(); s_it++)
+    else
     {
-      _return.values.push_back(*s_it);
+      for (std::set<std::string>::iterator s_it = it->second.begin(); s_it != it->second.end(); s_it++)
+      {
+        _return.values.push_back(*s_it);
+      }
+      _return.status =  KVStoreStatus::OK;
     }
-
-    _return.status =  KVStoreStatus::OK;
   }
-
 
   KVStoreStatus::type _Put(const std::string& key, const std::string& value)
   {
@@ -487,13 +521,46 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     vector < pair<string, int> > _backendServerVector;
     map<string, int> _backendServerIDMap;
     set<int> _runningServer;
+    set<int> _notJoinedServer;
 
     map<string, string> _simpleStorage;
     map<string, set<string> > _listStorage;
 
+    void setServerInfo(const string& key, const string& value)
+    {
+      _simpleStorage[key] = value;
+    }
+
     bool acceptRequest()
     {
       return _status == KVServerStatus::RUNNING;
+    }
+
+    void processCommand(const string& command, const string& clientid)
+    {
+      if (command == "join cluster")
+      {
+        int _clientid = atoi(clientid.c_str());
+        _clientid = (_clientid > atoi(_id.c_str()))? _clientid - 2 : _clientid - 1;
+
+        _notJoinedServer.erase(_clientid);
+        _runningServer.insert(_clientid);
+        /*GetResponse rp;
+        for (set<int>::iterator it = _notJoinedServer.begin(); it != _notJoinedServer.end(); it++)
+        {
+          rp = RPC_Get(*it, "server_id");
+          if (rp.status == KVStoreStatus::OK && rp.value == clientid)
+          {
+            _notJoinedServer.erase(it);
+            _runningServer.insert(*it);
+            break;
+          }
+        }*/
+      }
+      else
+      {
+        cout << "Unknown command" << endl;
+      }
     }
 };
 
