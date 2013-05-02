@@ -1,7 +1,8 @@
 THRIFT_DIR := /usr/local/include/thrift
 BOOST_DIR := /usr/local/include
-JSON_DIR := jsoncpp-src-0.5.0/include
+JSON_DIR := jsoncpp/include
 INCLUDE := ../include
+LDFLAGS := -L/usr/local/lib -Ljsoncpp/lib
 TRIBBLER_SRC := Tribbler.cpp Tribbler_constants.cpp Tribbler_types.cpp
 TRIBBLER_OBJ := $(patsubst %.cpp,%.o, $(TRIBBLER_SRC))
 KV_SRC := KeyValueStore.cpp KeyValueStore_types.cpp KeyValueStore_constants.cpp
