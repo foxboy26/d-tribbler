@@ -2,6 +2,8 @@
 // You should copy it to another filename to avoid overwriting it.
 
 #include "KeyValueStore.h"
+#include "VectorTimestamp.h"
+
 #include <transport/TSocket.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/server/TSimpleServer.h>
@@ -32,31 +34,61 @@ struct KVServerStatus
   };
 };
 
-class Value
+class Message
 {
   public:
     string value;
-    int64_t timestamp;
+    VectorTimestamp vt;
 
-    Value(string value, int64_t timestamp)
+    Message() {}
+    Message(const string& value, const VectorTimestamp& vt)
     {
       this->value = value;
-      this->timestamp = timestamp;
+      this->vt = vt;
     }
 
-    string ToJSON()
+    string ToJSON() const
     {
       stringstream ss;
-      ss << "{\"value\": " << value << ", \"timestamp\": " << timestamp << "}";
+      ss << "{\"value\": \"" << value << "\", \"vt\": " << vt.ToJSON() << "}";
       return ss.str();
     }
+
+    friend Message ToMessage(const string& json);
 };
+
+Message ToMessage(const string& json)
+{
+  Json::Value root;
+  Json::Reader reader;
+  bool isSuccess = reader.parse(json, root);
+  if (!isSuccess)
+  {
+    cout << "error in json syntax" << endl;
+  }
+
+  Message msg;
+  msg.value = root["value"].asString();
+  int size = root["vt"].size();
+  for (int i = 0; i < size; i++)
+    msg.vt.vt.push_back(root["vt"][i].asInt());
+
+  return msg;
+}
+
+ostream& operator<< (ostream& out, const Message& m) 
+{
+  out << m.ToJSON();
+
+  return out;
+}
 
 class KeyValueStoreHandler : virtual public KeyValueStoreIf {
  public:
   KeyValueStoreHandler(int argc, char** argv) {
     // Your initialization goes here
     _id = string(argv[1]);
+    _vt = VectorTimestamp(_id - 1, argc / 2);
     setServerInfo("server_id", _id);
     setServerInfo("server_status", "notjoined");
 
@@ -216,11 +248,21 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     {
       cout << "Server [" << _id << "]: Put request from [" << clientid << "]" << endl;
 
+      this->vt.Inc();
+
+      if (key == "server_syscmd")
+      {
+        cout << "Server [" << _id << "]: Process command [" << value << "] from [" << clientid << "]" << endl;
+        processCommand(value, clientid);
+        return KVStoreStatus::OK;
+      }
+
       if (clientid == "tribbleserver")
       {
         KVStoreStatus::type status;
 
-        status = _Put(key, value);
+        Message m(value, this->vt);
+        status = _Put(key, m.ToJSON());
         if (status == KVStoreStatus::OK)
         {
           for (set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
@@ -237,17 +279,7 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       }
       else 
       {
-        if (key == "server_syscmd")
-        {
-          cout << "Server [" << _id << "]: Process command [" << value << "] from [" << clientid << "]" << endl;
-          processCommand(value, clientid);
-          return KVStoreStatus::OK;
-        }
-        else
-        {
-          //TODO: process request from other KV server
-          return _Put(key, value);
-        }
+        return _Put(key, value);
       }
     }
     else
@@ -386,7 +418,14 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       KeyValueStoreClient client(protocol);
       KVStoreStatus::type st;
       transport->open();
-      st = client.Put(key, value, this->_id);
+      if (key == "server_syscmd")
+        st = client.Put(key, value, this->_id);
+      else
+      {
+        this->vt.Inc();
+        Message m(value, this->vt);
+        st = client.Put(key, m.ToJSON(), this->_id);
+      }
       transport->close();
       return st;
     }
@@ -407,7 +446,9 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       KeyValueStoreClient client(protocol);
       KVStoreStatus::type st;
       transport->open();
-      st = client.AddToList(key, value, this->_id);
+      this->vt.Inc();
+      Message m(value, this->vt);
+      st = client.AddToList(key, m.ToJSON(), this->_id);
       transport->close();
       return st;
     }
@@ -428,7 +469,9 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       KeyValueStoreClient client(protocol);
       KVStoreStatus::type st;
       transport->open();
-      st = client.RemoveFromList(key, value, this->_id);
+      this->vt.Inc();
+      Message m(value, this->vt);
+      st = client.RemoveFromList(key, m.ToJSON(), this->_id);
       transport->close();
       return st;
     }
@@ -519,9 +562,9 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     string _id;
     KVServerStatus::type _status;
     vector < pair<string, int> > _backendServerVector;
-    map<string, int> _backendServerIDMap;
     set<int> _runningServer;
     set<int> _notJoinedServer;
+    VectorTimestamp _vt;
 
     map<string, string> _simpleStorage;
     map<string, set<string> > _listStorage;
@@ -545,17 +588,6 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
 
         _notJoinedServer.erase(_clientid);
         _runningServer.insert(_clientid);
-        /*GetResponse rp;
-        for (set<int>::iterator it = _notJoinedServer.begin(); it != _notJoinedServer.end(); it++)
-        {
-          rp = RPC_Get(*it, "server_id");
-          if (rp.status == KVStoreStatus::OK && rp.value == clientid)
-          {
-            _notJoinedServer.erase(it);
-            _runningServer.insert(*it);
-            break;
-          }
-        }*/
       }
       else
       {

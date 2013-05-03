@@ -6,6 +6,10 @@
 class VectorTimestamp
 {
   public:
+    std::vector<int64_t> vt;
+    unsigned int processor;
+
+    VectorTimestamp() {}
     VectorTimestamp(unsigned int p, unsigned int n);
 
     void Inc();
@@ -16,8 +20,4 @@ class VectorTimestamp
     bool operator> (const VectorTimestamp& vt);
 
     friend VectorTimestamp ToVectorTimestamp(const std::string& json);
-
-  private:
-    std::vector<int64_t> vt;
-    unsigned int processor;
 };
