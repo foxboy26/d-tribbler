@@ -175,7 +175,8 @@ class TribblerHandler : virtual public TribblerIf {
             continue;
 
           t.userid = userid;
-          t.posted = atol(posted.c_str());
+          //t.posted = atol(posted.c_str());
+          t.posted.push_back(atol(posted.c_str()));
           t.contents = response.value;
           _return.tribbles.push_back(t);
         }
@@ -234,7 +235,8 @@ class TribblerHandler : virtual public TribblerIf {
             continue;
 
           t.userid = ut.userid;
-          t.posted = atol(ut.posted.c_str());
+          //t.posted = atol(ut.posted.c_str());
+          t.posted.push_back(atol(ut.posted.c_str()));
           t.contents = response.value;
           _return.tribbles.push_back(t);
         }
@@ -330,7 +332,7 @@ class TribblerHandler : virtual public TribblerIf {
   KeyValueStore::GetListResponse GetList(std::string key) {
     KeyValueStore::GetListResponse response;
     // Making the RPC Call to the Storage server
-    boost::shared_ptr<TSocket> socket(new TSocket(_storageServer, _storageServerPort));
+    boost::shared_ptr<TSocket> socket(new TSocket(_kvServer, _kvServerPort));
     boost::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
     boost::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
     KeyValueStoreClient client(protocol);
@@ -356,6 +358,8 @@ class TribblerHandler : virtual public TribblerIf {
       return true;
   }
 };
+
+size_t TribblerHandler::maxTribbles = 100;
 
 int main(int argc, char **argv) {
   if (argc != 4) {
