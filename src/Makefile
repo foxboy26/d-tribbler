@@ -2,10 +2,10 @@ THRIFT_DIR := /usr/local/include/thrift
 BOOST_DIR := /usr/local/include
 JSON_DIR := jsoncpp/include
 INCLUDE := ../include
-LDFLAGS := -L/usr/local/lib -Ljsoncpp/lib
+# LDFLAGS := -L/usr/local/lib -Ljsoncpp/lib
 TRIBBLER_SRC := Tribbler.cpp Tribbler_constants.cpp Tribbler_types.cpp
 TRIBBLER_OBJ := $(patsubst %.cpp,%.o, $(TRIBBLER_SRC))
-KV_SRC := KeyValueStore.cpp KeyValueStore_types.cpp KeyValueStore_constants.cpp
+KV_SRC := KeyValueStore.cpp KeyValueStore_types.cpp KeyValueStore_constants.cpp Message.cpp VectorTimestamp.cpp
 KV_OBJ := $(patsubst %.cpp,%.o, $(KV_SRC))
 
 INC := -I$(THRIFT_DIR) -I$(BOOST_DIR) -I$(INCLUDE) -I$(JSON_DIR)
@@ -21,16 +21,17 @@ all: tribbler_server tribbler_client kv_server
 	$(CXX) -Wall -DHAVE_INTTYPES_H -DHAVE_NETINET_IN_H $(INC) -c $< -o $@
 
 kv_server: KeyValueStore_server.o $(KV_OBJ)
-	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift
+	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift -Ljsoncpp/lib -ljson
 
 kv_client: KeyValueStore_client.o $(KV_OBJ)
-	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift
+	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift -Ljsoncpp/lib -ljson
 
 tribbler_server: Tribbler_server.o $(TRIBBLER_OBJ) $(KV_OBJ)
-	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift
+	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift -Ljsoncpp/lib -ljson
 
 tribbler_client: Tribbler_client.o $(TRIBBLER_OBJ)
-	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift
+	$(CXX) $^ -o $@ -L/usr/local/lib -lthrift -Ljsoncpp/lib -ljson
+
 
 clean:
 	$(RM) *.o tribbler_server tribbler_client kv_server

@@ -79,76 +79,13 @@ VectorTimestamp ToVectorTimestamp(const std::string& json)
   {
     cout << "error in json syntax" << endl;
   }
-
-  VectorTimestamp vt(-1, root.size());
-  for (int i = 0; i < root.size(); i++)
+  
+  int size = root.size();
+  VectorTimestamp vt(-1, size);
+  for (int i = 0; i < size; i++)
   {
     vt.vt[i] = root[i].asInt();
   }
 
   return vt;
-}
-
-class Message
-{
-  public:
-    string value;
-    VectorTimestamp vt;
-
-    Message() {}
-    Message(const string& value, const VectorTimestamp& vt)
-    {
-      this->value = value;
-      this->vt = vt;
-    }
-
-    string ToJSON() const
-    {
-      stringstream ss;
-      ss << "{\"value\": \"" << value << "\", \"vt\": " << vt.ToJSON() << "}";
-      return ss.str();
-    }
-
-    friend Message ToMessage(const string& json);
-};
-
-Message ToMessage(const string& json)
-{
-  Json::Value root;
-  Json::Reader reader;
-  bool isSuccess = reader.parse(json, root);
-  if (!isSuccess)
-  {
-    cout << "error in json syntax" << endl;
-  }
-
-  Message msg;
-  msg.value = root["value"].asString();
-  int size = root["vt"].size();
-  for (int i = 0; i < size; i++)
-    msg.vt.vt.push_back(root["vt"][i].asInt());
-
-  return msg;
-}
-
-ostream& operator<< (ostream& out, const Message& m) 
-{
-  out << m.ToJSON();
-
-  return out;
-}
-
-int main()
-{
-  VectorTimestamp test;
-
-  VectorTimestamp vt(1, 10);
-
-  Message m("xxx", vt);
-
-  Message m2 = ToMessage("{\"value\":\"lzh\", \"vt\":[232,13,2,3]}");
-
-  cout << m2 << endl;
-
-  return 0;
 }

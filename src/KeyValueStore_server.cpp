@@ -3,6 +3,7 @@
 
 #include "KeyValueStore.h"
 #include "VectorTimestamp.h"
+#include "Message.h"
 
 #include <transport/TSocket.h>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -10,8 +11,9 @@
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TBufferTransports.h>
 
-#include <sstream>
 #include <json/json.h>
+
+#include <sstream>
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -34,62 +36,16 @@ struct KVServerStatus
   };
 };
 
-class Message
-{
-  public:
-    string value;
-    VectorTimestamp vt;
-
-    Message() {}
-    Message(const string& value, const VectorTimestamp& vt)
-    {
-      this->value = value;
-      this->vt = vt;
-    }
-
-    string ToJSON() const
-    {
-      stringstream ss;
-      ss << "{\"value\": \"" << value << "\", \"vt\": " << vt.ToJSON() << "}";
-      return ss.str();
-    }
-
-    friend Message ToMessage(const string& json);
-};
-
-Message ToMessage(const string& json)
-{
-  Json::Value root;
-  Json::Reader reader;
-  bool isSuccess = reader.parse(json, root);
-  if (!isSuccess)
-  {
-    cout << "error in json syntax" << endl;
-  }
-
-  Message msg;
-  msg.value = root["value"].asString();
-  int size = root["vt"].size();
-  for (int i = 0; i < size; i++)
-    msg.vt.vt.push_back(root["vt"][i].asInt());
-
-  return msg;
-}
-
-ostream& operator<< (ostream& out, const Message& m) 
-{
-  out << m.ToJSON();
-
-  return out;
-}
-
 class KeyValueStoreHandler : virtual public KeyValueStoreIf {
  public:
   KeyValueStoreHandler(int argc, char** argv) {
     // Your initialization goes here
-    _id = string(argv[1]);
-    _vt = VectorTimestamp(_id - 1, argc / 2);
-    setServerInfo("server_id", _id);
+    this->_id = string(argv[1]);
+
+    // Initialize vector timestamp
+    this->_vt = VectorTimestamp(atoi(this->_id.c_str()) - 1, argc / 2);
+
+    setServerInfo("server_id", this->_id);
     setServerInfo("server_status", "notjoined");
 
     for(int i = 3; i+1 < argc; i += 2) {
@@ -248,7 +204,7 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     {
       cout << "Server [" << _id << "]: Put request from [" << clientid << "]" << endl;
 
-      this->vt.Inc();
+      this->_vt.Inc();
 
       if (key == "server_syscmd")
       {
@@ -261,8 +217,9 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       {
         KVStoreStatus::type status;
 
-        Message m(value, this->vt);
-        status = _Put(key, m.ToJSON());
+        //Message m(value, this->vt);
+        //status = _Put(key, m.ToJSON());
+        status = _Put(key, value);
         if (status == KVStoreStatus::OK)
         {
           for (set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
@@ -418,14 +375,15 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       KeyValueStoreClient client(protocol);
       KVStoreStatus::type st;
       transport->open();
-      if (key == "server_syscmd")
+      st = client.Put(key, value, this->_id);
+      /*if (key == "server_syscmd")
         st = client.Put(key, value, this->_id);
       else
       {
         this->vt.Inc();
         Message m(value, this->vt);
         st = client.Put(key, m.ToJSON(), this->_id);
-      }
+      }*/
       transport->close();
       return st;
     }
@@ -446,9 +404,10 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       KeyValueStoreClient client(protocol);
       KVStoreStatus::type st;
       transport->open();
-      this->vt.Inc();
+      /*this->_vt.Inc();
       Message m(value, this->vt);
-      st = client.AddToList(key, m.ToJSON(), this->_id);
+      st = client.AddToList(key, m.ToJSON(), this->_id);*/
+      st = client.Put(key, value, this->_id);
       transport->close();
       return st;
     }
@@ -469,9 +428,10 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       KeyValueStoreClient client(protocol);
       KVStoreStatus::type st;
       transport->open();
-      this->vt.Inc();
+      /*this->vt.Inc();
       Message m(value, this->vt);
-      st = client.RemoveFromList(key, m.ToJSON(), this->_id);
+      st = client.RemoveFromList(key, m.ToJSON(), this->_id);*/
+      st = client.Put(key, value, this->_id);
       transport->close();
       return st;
     }
@@ -568,6 +528,8 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
 
     map<string, string> _simpleStorage;
     map<string, set<string> > _listStorage;
+    //map<string, Message> _simpleStorage;
+    //map<string, set<Message> > _listStorage;
 
     void setServerInfo(const string& key, const string& value)
     {

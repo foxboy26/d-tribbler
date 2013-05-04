@@ -13,7 +13,7 @@
 
 #include "Tribbler.h"
 #include "KeyValueStore.h"
-#include "VectorTimestamp.h"
+#include "Message.h"
 #include <transport/TSocket.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/server/TSimpleServer.h>
@@ -100,6 +100,8 @@ class TribblerHandler : virtual public TribblerIf {
       return TribbleStatus::INVALID_SUBSCRIBETO;
     
     KVStoreStatus::type status = RemoveFromList(userid + "_sub", subscribeto);
+    if (status != KVStoreStatus::OK)
+      return TribbleStatus::STORE_FAILED;
 
     return TribbleStatus::OK;
   }
@@ -134,12 +136,12 @@ class TribblerHandler : virtual public TribblerIf {
       {
         Tribble t;
         Message m; 
-        size_t num = min(maxTribbles, listResponse.values.size());
-        for (size_t i = 0; i < num; i++)
+        int num = min(maxTribbles, static_cast<int>(listResponse.values.size()));
+        for (int i = 0; i < num; i++)
         {
           m = ToMessage(listResponse.values[i]);
           t.userid = userid;
-          t.posted = m.vt;
+          t.posted = m.vt.vt;
           t.contents = m.value;
           _return.tribbles.push_back(t);
         }
@@ -192,9 +194,9 @@ class TribblerHandler : virtual public TribblerIf {
       if (subResponse.status == TribbleStatus::OK)
       {
         priority_queue<Tribble> pq;
-        unsigned int count = 0;
 
         Tribble t;
+        Message m;
         int num = subResponse.subscriptions.size();
         GetListResponse* listResponse = new GetListResponse[num];
         map<string, pair<int, int> > idx_map;
@@ -209,25 +211,25 @@ class TribblerHandler : virtual public TribblerIf {
           {
             m = ToMessage(listResponse[i].values[0]);
             t.userid = subResponse.subscriptions[i];
-            t.posted = m.vt;
+            t.posted = m.vt.vt;
             t.contents = m.value;
             pq.push(t);
             idx_map[subResponse.subscriptions[i]] = make_pair<int, int>(i, 1);
           }
         }
 
-        for (uint32_t i = 0; i < maxvTribbles; i++)
+        for (int i = 0; i < maxTribbles; i++)
         {
           t = pq.top();
           pq.pop();
 
-          pair<int, int>::iterator it = idx_map.find(t.userid);
-          m = ToMessage(listResponse[it->first].values[it->second]);
+          map<string, pair<int, int> >::iterator it = idx_map.find(t.userid);
+          m = ToMessage(listResponse[it->second.first].values[it->second.second]);
           t.userid = subResponse.subscriptions[i];
-          t.posted = m.vt;
+          t.posted = m.vt.vt;
           t.contents = m.value;
           pq.push(t);
-          it->second++;
+          (it->second.second)++;
 
           _return.tribbles.push_back(t);
         }
@@ -375,7 +377,7 @@ class TribblerHandler : virtual public TribblerIf {
   std::string _kvServer;
   int _kvServerPort;
 
-  static size_t maxTribbles;
+  static int maxTribbles;
 
   bool CheckUser(const std::string &userid)
   {
@@ -388,7 +390,7 @@ class TribblerHandler : virtual public TribblerIf {
   }
 };
 
-size_t TribblerHandler::maxTribbles = 100;
+int TribblerHandler::maxTribbles = 100;
 
 int main(int argc, char **argv) {
   if (argc != 4) {

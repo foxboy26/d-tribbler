@@ -1,7 +1,8 @@
 #pragma once
 
-#include<string>
-#include<vector>
+#include <string>
+#include <vector>
+#include <stdint.h>
 
 class VectorTimestamp
 {
@@ -21,3 +22,6 @@ class VectorTimestamp
 
     friend VectorTimestamp ToVectorTimestamp(const std::string& json);
 };
+
+VectorTimestamp ToVectorTimestamp(const std::string& json);
+std::ostream& operator<< (std::ostream& out, const VectorTimestamp& vt);

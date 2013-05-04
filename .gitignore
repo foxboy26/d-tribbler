@@ -4,3 +4,4 @@ tribbler_server
 client_server
 kv_client
 a.out
+*.a
