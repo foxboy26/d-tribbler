@@ -74,7 +74,7 @@ class TribblerHandler : virtual public TribblerIf {
       return TribbleStatus::INVALID_USER;
 
     //const string _subscribeto = "u_" + userid;
-    if (!CheckUser(subscribeto))
+    if (!CheckUser(subscribeto) || userid == subscribeto)
       return TribbleStatus::INVALID_SUBSCRIBETO;
 
     KVStoreStatus::type status = AddToList(userid + "_sub", subscribeto);
@@ -178,6 +178,10 @@ class TribblerHandler : virtual public TribblerIf {
 
         _return.status = TribbleStatus::OK;
       }
+      else if (listResponse.status == KVStoreStatus::EKEYNOTFOUND)
+        _return.status = TribbleStatus::OK;
+      else
+        _return.status = TribbleStatus::INTERNAL_FAILURE;
     }
   }
 
@@ -200,6 +204,7 @@ class TribblerHandler : virtual public TribblerIf {
         int num = subResponse.subscriptions.size();
         GetListResponse* listResponse = new GetListResponse[num];
         map<string, pair<int, int> > idx_map;
+
         for (int i = 0; i < num; i++)
         {
           listResponse[i] = GetList(subResponse.subscriptions[i] + "_tribble");
@@ -218,7 +223,7 @@ class TribblerHandler : virtual public TribblerIf {
           }
         }
 
-        for (int i = 0; i < maxTribbles; i++)
+        for (int i = 0; i < maxTribbles && !pq.empty(); i++)
         {
           t = pq.top();
           pq.pop();
@@ -276,7 +281,7 @@ class TribblerHandler : virtual public TribblerIf {
         _return.status = TribbleStatus::OK;
       }
       else
-        _return.status = TribbleStatus::INVALID_USER;
+        _return.status = TribbleStatus::INTERNAL_FAILURE;
     }
   }
 
@@ -299,8 +304,10 @@ class TribblerHandler : virtual public TribblerIf {
         }
         _return.status = TribbleStatus::OK;
       }
+      else if (listResponse.status == KVStoreStatus::EKEYNOTFOUND)
+        _return.status = TribbleStatus::OK;
       else
-        _return.status = TribbleStatus::INVALID_USER;
+        _return.status = TribbleStatus::INTERNAL_FAILURE;
     }
   }
 

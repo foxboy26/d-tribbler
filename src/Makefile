@@ -12,7 +12,7 @@ INC := -I$(THRIFT_DIR) -I$(BOOST_DIR) -I$(INCLUDE) -I$(JSON_DIR)
 
 .PHONY: all clean
 
-all: tribbler_server tribbler_client kv_server
+all: tribbler_server tribbler_client kv_server kv_client
 
 %.o: ../include/%.cpp
 	$(CXX) -Wall -DHAVE_INTTYPES_H -DHAVE_NETINET_IN_H $(INC) -c $< -o $@

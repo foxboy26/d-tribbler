@@ -230,9 +230,10 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
             else if (status != KVStoreStatus::OK)
               return status;
           }
+          return KVStoreStatus::OK;
         }
-
-        return KVStoreStatus::OK;
+        else
+          return status;
       }
       else 
       {
@@ -269,9 +270,10 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
             else if (status != KVStoreStatus::OK)
               return status;
           }
+          return KVStoreStatus::OK;
         }
-
-        return KVStoreStatus::OK;
+        else
+          return status;
       }
       else
       {
@@ -305,9 +307,10 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
             else if (status != KVStoreStatus::OK)
               return status;
           }
+          return KVStoreStatus::OK;
         }
-
-        return KVStoreStatus::OK;
+        else
+          return status;
       }
       else
       {

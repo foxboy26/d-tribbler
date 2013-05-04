@@ -21,6 +21,7 @@ class VectorTimestamp
     bool operator> (const VectorTimestamp& vt);
 
     friend VectorTimestamp ToVectorTimestamp(const std::string& json);
+    friend std::ostream& operator<< (std::ostream& out, const VectorTimestamp& vt);
 };
 
 VectorTimestamp ToVectorTimestamp(const std::string& json);
