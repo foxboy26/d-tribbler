@@ -33,7 +33,7 @@ using namespace  ::KeyValueStore;
 
 bool Tribble::operator < (const Tribble & t) const
 {
-  return this->posted < t.posted;
+  return this->posted > t.posted;
 }
 
 class TribblerHandler : virtual public TribblerIf {
@@ -136,7 +136,7 @@ class TribblerHandler : virtual public TribblerIf {
       {
         Tribble t;
         Message m; 
-        int num = min(maxTribbles, static_cast<int>(listResponse.values.size()));
+        /*int num = min(maxTribbles, static_cast<int>(listResponse.values.size()));
         for (int i = 0; i < num; i++)
         {
           m = ToMessage(listResponse.values[i]);
@@ -144,36 +144,26 @@ class TribblerHandler : virtual public TribblerIf {
           t.posted = m.vt.vt;
           t.contents = m.value;
           _return.tribbles.push_back(t);
-        }
+        }*/
 
-        /*priority_queue<string, vector<string>, greater<string> > pq;
-
-        for (size_t i = 0; i < num; i++)
+        priority_queue<Tribble> pq;
+        int num = listResponse.values.size();
+        for (int i = 0; i < num; i++)
         {
-          pq.push(listResponse.values[i]);
+          m = ToMessage(listResponse.values[i]);
+          t.userid = userid;
+          t.posted = m.vt.vt;
+          t.contents = m.value;
+          pq.push(t);
           if (i >= maxTribbles)
-          {
             pq.pop();
-          }
         }
        
-        GetResponse response;
-        Tribble t;
         while (!pq.empty())
         {
-          string posted = pq.top();
+          _return.tribbles.push_back(pq.top());
           pq.pop();
-
-          response = Get(userid + posted);
-          if (response.status != KVStoreStatus::OK)
-            continue;
-
-          t.userid = userid;
-          //t.posted = atol(posted.c_str());
-          t.posted.push_back(atol(posted.c_str()));
-          t.contents = response.value;
-          _return.tribbles.push_back(t);
-        }*/
+        }
         reverse(_return.tribbles.begin(), _return.tribbles.end());
 
         _return.status = TribbleStatus::OK;
@@ -202,7 +192,7 @@ class TribblerHandler : virtual public TribblerIf {
         Tribble t;
         Message m;
         int num = subResponse.subscriptions.size();
-        GetListResponse* listResponse = new GetListResponse[num];
+        /*GetListResponse* listResponse = new GetListResponse[num];
         map<string, pair<int, int> > idx_map;
 
         for (int i = 0; i < num; i++)
@@ -239,9 +229,10 @@ class TribblerHandler : virtual public TribblerIf {
           _return.tribbles.push_back(t);
         }
 
-        delete [] listResponse;
-
-        /*for (int i = 0; i < num; i++)
+        delete [] listResponse;*/
+        int count = 0; 
+        GetListResponse listResponse;
+        for (int i = 0; i < num; i++)
         {
           listResponse = GetList(subResponse.subscriptions[i] + "_tribble");
           if (listResponse.status == KVStoreStatus::OK)
@@ -249,34 +240,25 @@ class TribblerHandler : virtual public TribblerIf {
             int len = listResponse.values.size();
             for (int j = 0; j < len; j++)
             {
-              ut.userid = subResponse.subscriptions[i];
-              ut.posted = listResponse.values[j];
+              m = ToMessage(listResponse.values[j]);
+              t.userid = subResponse.subscriptions[i];
+              t.posted = m.vt.vt;
+              t.contents = m.value;
+              pq.push(t);
+
               count++;
-              pq.push(ut);
-              if (count > maxvTribbles)
+              if (count > maxTribbles)
                 pq.pop();
             }
           }
         }
 
-        GetResponse response;
-        Tribble t;
         while (!pq.empty())
         {
-          ut = pq.top();
+          _return.tribbles.push_back(pq.top());
           pq.pop();
-
-          response = Get(ut.userid + ut.posted);
-          if (response.status != KVStoreStatus::OK)
-            continue;
-
-          t.userid = ut.userid;
-          //t.posted = atol(ut.posted.c_str());
-          t.posted.push_back(atol(ut.posted.c_str()));
-          t.contents = response.value;
-          _return.tribbles.push_back(t);
         }
-        reverse(_return.tribbles.begin(), _return.tribbles.end());*/
+        reverse(_return.tribbles.begin(), _return.tribbles.end());
 
         _return.status = TribbleStatus::OK;
       }

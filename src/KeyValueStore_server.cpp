@@ -61,7 +61,7 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     _status = KVServerStatus::SYNCING;
 
     //step1: find a running server;
-    int target = findRunningServer();
+    int target = FindRunningServer();
 
     //step2: get data from running server if necessary
     if (target != -1)
@@ -71,13 +71,20 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       KVStoreStatus::type status;
       status = GetDataFromServer(target);
       if (status != KVStoreStatus::OK)
+      {
+        cout << "Error in GetDataFromServer, failed!" << endl;
+        exit(1);
         return;
-
+      }
       //step3: tell other server I am ready.
       cout << "Server [" << _id << "] is ready to join, inform running servers..." << endl;
-      status = joinCluster();
+      status = JoinCluster();
       if (status != KVStoreStatus::OK)
+      {
+        cout << "Error in GetDataFromServer, failed!" << endl;
+        exit(1);
         return;
+      }
     }
 
     setServerInfo("server_status", "running");
@@ -86,7 +93,7 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     cout << "success!" << endl;
   }
 
-  int findRunningServer()
+  int FindRunningServer()
   {
     GetResponse rp;
     int target = -1;
@@ -110,14 +117,21 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     return target;
   }
 
-  KVStoreStatus::type joinCluster()
+  KVStoreStatus::type JoinCluster()
   {
     KVStoreStatus::type status;
-    for(set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
+    /*for(set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
     {
       status = RPC_Put(*it, "server_syscmd", "join cluster");
       if (status != KVStoreStatus::OK)
         return status;
+    }*/
+    int size = _backendServerVector.size();
+    for(int i = 0; i < size; i++)
+    {
+      status = RPC_Put(i, "server_syscmd", "join cluster");
+      if (status == KVStoreStatus::INTERNAL_FAILURE)
+        continue;
     }
     return KVStoreStatus::OK;
   }
@@ -248,6 +262,16 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
     }
   }
 
+  bool isTribble(const std::string& str)
+  {
+    string suffix = "_tribble";
+    size_t suffix_len = suffix.length();
+    if (str.length() <= suffix_len)
+      return false;
+    else
+      return (str.compare(str.length() - suffix_len, suffix_len, suffix) == 0);
+  }
+
   KVStoreStatus::type AddToList(const std::string& key, const std::string& value, const std::string& clientid) {
     // Your implementation goes here
     if (acceptRequest())
@@ -259,12 +283,35 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       {
         KVStoreStatus::type status;
 
-        status = _AddToList(key, value);
+        //TODO: generalize it!!!
+        string _value = value;
+        Message m;
+        if (isTribble(key))
+        {
+          this->_vt.Inc();
+          m = Message(value, this->_vt);
+          _value = m.ToJSON(); 
+        }
+
+        cout << "Server [" << _id << "]: value = " << _value << endl;
+        cout << "Server [" << _id << "]: vt = " << this->_vt << endl;
+
+        status = _AddToList(key, _value);
         if (status == KVStoreStatus::OK)
         {
+          if (isTribble(key))
+          {
+            this->_vt.Inc();
+            m.vt = this->_vt;
+            _value = m.ToJSON();
+
+            cout << "Server [" << _id << "]: value = " << _value << endl;
+            cout << "Server [" << _id << "]: vt = " << this->_vt << endl;
+          }
+
           for (set<int>::iterator it = _runningServer.begin(); it != _runningServer.end(); it++)
           {
-            status = RPC_AddToList(*it, key, value);
+            status = RPC_AddToList(*it, key, _value);
             if (status == KVStoreStatus::INTERNAL_FAILURE)
               continue;
             else if (status != KVStoreStatus::OK)
@@ -278,6 +325,16 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       else
       {
         //TODO: process request from other KV server
+        if (isTribble(key))
+        {
+          this->_vt.Inc();
+          Message m = ToMessage(value);
+          this->_vt.Update(m.vt);
+
+          cout << "Server [" << _id << "]: value = " << value << endl;
+          cout << "Server [" << _id << "]: vt = " << this->_vt << endl;
+        }
+
         return _AddToList(key, value);
       }
     }
@@ -410,7 +467,7 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       /*this->_vt.Inc();
       Message m(value, this->vt);
       st = client.AddToList(key, m.ToJSON(), this->_id);*/
-      st = client.Put(key, value, this->_id);
+      st = client.AddToList(key, value, this->_id);
       transport->close();
       return st;
     }
@@ -434,7 +491,7 @@ class KeyValueStoreHandler : virtual public KeyValueStoreIf {
       /*this->vt.Inc();
       Message m(value, this->vt);
       st = client.RemoveFromList(key, m.ToJSON(), this->_id);*/
-      st = client.Put(key, value, this->_id);
+      st = client.RemoveFromList(key, value, this->_id);
       transport->close();
       return st;
     }
