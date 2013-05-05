@@ -17,8 +17,8 @@ class VectorTimestamp
     void Update(const VectorTimestamp& vt);
     std::string ToJSON() const;
 
-    bool operator< (const VectorTimestamp& vt);
-    bool operator> (const VectorTimestamp& vt);
+    bool operator< (const VectorTimestamp& vt) const;
+    bool operator> (const VectorTimestamp& vt) const;
 
     friend VectorTimestamp ToVectorTimestamp(const std::string& json);
     friend std::ostream& operator<< (std::ostream& out, const VectorTimestamp& vt);

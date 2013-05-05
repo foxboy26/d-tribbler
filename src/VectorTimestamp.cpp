@@ -55,9 +55,9 @@ std::string VectorTimestamp::ToJSON() const
 }
 
 //TODO: compare
-bool VectorTimestamp::operator< (const VectorTimestamp& vt)
+bool VectorTimestamp::operator< (const VectorTimestamp& vt) const
 {
-  int size = this->vt.size();
+  int size = min(this->vt.size(), vt.vt.size());
   for (int i = 0; i < size; i++)
     if (this->vt[i] > vt.vt[i])
       return false;
@@ -65,7 +65,7 @@ bool VectorTimestamp::operator< (const VectorTimestamp& vt)
   return true;
 }
 
-bool VectorTimestamp::operator> (const VectorTimestamp& vt)
+bool VectorTimestamp::operator> (const VectorTimestamp& vt) const
 {
   return !(*this < vt);
 }

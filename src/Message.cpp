@@ -6,7 +6,7 @@
 #include <sstream>
 using namespace std;
 
-inline Message::Message(const std::string& value, const VectorTimestamp& vt)
+Message::Message(const std::string& value, const VectorTimestamp& vt)
 {
   this->value = value;
   this->vt = vt;
@@ -43,4 +43,19 @@ ostream& operator<< (ostream& out, const Message& m)
   out << m.ToJSON();
 
   return out;
+}
+
+bool operator== (const Message& lhs, const Message& rhs)
+{
+  return lhs.value == rhs.value;
+}
+
+bool operator< (const Message& lhs, const Message& rhs)
+{
+  return lhs.vt < rhs.vt;
+}
+
+bool operator> (const Message& lhs, const Message& rhs)
+{
+  return !(lhs < rhs);
 }
